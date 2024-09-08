@@ -79,17 +79,17 @@ export default function Vehicle({
     }
 
     // Apply steering based on mouse position
-    const steeringStrength = 2 * delta;
     const targetRotationY = -(mousePosition.current.x * Math.PI) / 4; // Max 45 degrees rotation
     const currentRotation = new THREE.Euler().setFromQuaternion(
       threeQuaternion
     );
 
     // Smoothly interpolate the rotation
+    const rotationSpeed = 20 * delta;
     currentRotation.y = THREE.MathUtils.lerp(
       currentRotation.y,
       targetRotationY,
-      steeringStrength
+      rotationSpeed
     );
 
     // Convert back to Quaternion and set the rotation
@@ -109,16 +109,6 @@ export default function Vehicle({
       vec3({ x: impulse.x, y: impulse.y, z: impulse.z }),
       true
     );
-
-    // Restrict horizontal movement (without forcing back to center)
-    const horizontalBoundary = 15;
-    if (Math.abs(vehiclePosition.x) > horizontalBoundary) {
-      const clampedX = Math.sign(vehiclePosition.x) * horizontalBoundary;
-      vehicle.current.setTranslation(
-        vec3({ x: clampedX, y: vehiclePosition.y, z: vehiclePosition.z }),
-        true
-      );
-    }
 
     // Update camera (zoomed out)
     const cameraPosition = new THREE.Vector3(0, 8, 15)
