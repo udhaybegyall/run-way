@@ -71,8 +71,15 @@ export default function FallingShapes({
   const addShape = useCallback((vehiclePosition: THREE.Vector3) => {
     const type = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
     const color = colors[Math.floor(Math.random() * colors.length)];
-    const x = Math.random() * 10 - 5;
-    const z = vehiclePosition.z - (Math.random() * 20 + 30); // Spawn further ahead of the vehicle
+
+    // Generate a random angle and radius
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.random() * 20 + 10; // Shapes will spawn between 10 and 30 units away
+
+    // Calculate x and z based on the angle and radius
+    const x = vehiclePosition.x + Math.cos(angle) * radius;
+    const z = vehiclePosition.z + Math.sin(angle) * radius;
+
     const scale: [number, number, number] = [
       Math.random() * 0.5 + 0.5,
       Math.random() * 0.5 + 0.5,
@@ -85,7 +92,7 @@ export default function FallingShapes({
         id: Date.now(),
         type,
         color,
-        position: [x, 20, z],
+        position: [x, 25, z],
         scale,
       },
     ]);
@@ -103,15 +110,19 @@ export default function FallingShapes({
     const vehiclePosition = state.camera.position;
     const currentTime = state.clock.getElapsedTime();
 
-    // Check if the vehicle is moving
-    const isMoving =
-      vehiclePosition.distanceTo(lastVehiclePosition.current) > 0.1;
-
-    // Only spawn shapes when the vehicle is moving and enough time has passed
-    if (isMoving && currentTime - lastSpawnTime.current > 1) {
+    // Spawn shapes at regular intervals, regardless of movement
+    if (currentTime - lastSpawnTime.current > 0.2) {
       addShape(vehiclePosition);
       lastSpawnTime.current = currentTime;
     }
+
+    // Clean up shapes that are too far from the vehicle
+    setShapes((prevShapes) =>
+      prevShapes.filter((shape) => {
+        const shapePosition = new THREE.Vector3(...shape.position);
+        return shapePosition.distanceTo(vehiclePosition) < 50;
+      })
+    );
 
     lastVehiclePosition.current.copy(vehiclePosition);
   });
