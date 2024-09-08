@@ -1,12 +1,12 @@
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { Sky, KeyboardControls } from "@react-three/drei";
+import { Sky, KeyboardControls, OrbitControls } from "@react-three/drei";
 import { Suspense, useState, useCallback, useEffect } from "react";
 import Vehicle from "./Vehicle";
 import Ground from "./Ground";
 import FallingShapes from "./FallingShapes";
 import MenuScreen from "./MenuScreen";
-import Environment from "./Environment";
+// import Environment from "./Environment";
 import Link from "next/link";
 
 export default function Game() {
@@ -103,6 +103,7 @@ export default function Game() {
         ]}
       >
         <Canvas shadows camera={{ position: [0, 8, 15], fov: 60 }}>
+          <OrbitControls />
           <Sky sunPosition={[100, 20, 100]} />
           <ambientLight intensity={0.3} />
           <pointLight castShadow intensity={0.8} position={[100, 100, 100]} />
@@ -115,7 +116,7 @@ export default function Game() {
               />
               <Ground />
               <FallingShapes onCollision={handleGameOver} gameOver={gameOver} />
-              <Environment />
+              {/* <Environment /> */}
             </Suspense>
           </Physics>
         </Canvas>
