@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useKeyboardControls } from "@react-three/drei";
 import { RigidBody, RapierRigidBody, vec3 } from "@react-three/rapier";
@@ -8,35 +8,62 @@ type VehicleProps = {
   setScore: React.Dispatch<React.SetStateAction<number>>;
   onGameOver: () => void;
   gameOver: boolean;
+  orbitControlActive: boolean;
+  setIsLocked: React.Dispatch<React.SetStateAction<boolean>>;
+  isLocked: boolean;
+  exitPointerLock: () => void;
 };
 
 export default function Vehicle({
   setScore,
   onGameOver,
   gameOver,
+  orbitControlActive,
+  setIsLocked,
+  isLocked,
+  exitPointerLock,
 }: VehicleProps) {
   const vehicle = useRef<RapierRigidBody>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const [, getKeys] = useKeyboardControls();
-  const mousePosition = useRef({ x: 0, y: 0 });
+  const [rotationY, setRotationY] = useState(0);
 
   useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      mousePosition.current = {
-        x: (event.clientX / window.innerWidth) * 2 - 1,
-        y: -(event.clientY / window.innerHeight) * 2 + 1,
-      };
+    const canvas = gl.domElement;
+
+    const lockPointer = () => {
+      if (!isLocked && !orbitControlActive) {
+        canvas.requestPointerLock();
+      }
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isLocked && !orbitControlActive) {
+        setRotationY((prev) => prev - event.movementX * 0.002);
+      }
+    };
+
+    canvas.addEventListener("click", lockPointer);
+    document.addEventListener("mousemove", handleMouseMove);
+
+    return () => {
+      canvas.removeEventListener("click", lockPointer);
+      document.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [gl, isLocked, orbitControlActive, setIsLocked]);
+
+  useEffect(() => {
+    if (orbitControlActive) {
+      exitPointerLock();
+    }
+  }, [orbitControlActive, exitPointerLock]);
 
   useEffect(() => {
     if (gameOver) {
       resetVehicle();
+      exitPointerLock();
     }
-  }, [gameOver]);
+  }, [gameOver, exitPointerLock]);
 
   const resetVehicle = () => {
     if (!vehicle.current) return;
@@ -44,6 +71,7 @@ export default function Vehicle({
     vehicle.current.setRotation(new THREE.Quaternion(), true);
     vehicle.current.setLinvel(vec3({ x: 0, y: 0, z: 0 }), true);
     vehicle.current.setAngvel(vec3({ x: 0, y: 0, z: 0 }), true);
+    setRotationY(0);
   };
 
   useFrame((state, delta) => {
@@ -51,22 +79,15 @@ export default function Vehicle({
 
     const { forward, backward } = getKeys();
     const vehiclePosition = vehicle.current.translation();
-    const vehicleRotation = vehicle.current.rotation();
 
-    // Convert Rapier's Rotation to Three.js Quaternion
-    const threeQuaternion = new THREE.Quaternion(
-      vehicleRotation.x,
-      vehicleRotation.y,
-      vehicleRotation.z,
-      vehicleRotation.w
+    const threeQuaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, rotationY, 0)
     );
 
-    // Get the forward direction of the vehicle
     const forwardDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(
       threeQuaternion
     );
 
-    // Calculate the impulse based on the forward direction
     const speedMultiplier = 0.9;
     const impulseStrength = 50 * delta * speedMultiplier;
     const impulse = new THREE.Vector3();
@@ -78,54 +99,26 @@ export default function Vehicle({
       impulse.addScaledVector(forwardDirection, -impulseStrength);
     }
 
-    // Apply steering based on mouse position
-    const targetRotationY = -(mousePosition.current.x * Math.PI) / 4; // Max 45 degrees rotation
-    const currentRotation = new THREE.Euler().setFromQuaternion(
-      threeQuaternion
-    );
+    vehicle.current.setRotation(threeQuaternion, true);
 
-    // Smoothly interpolate the rotation
-    const rotationSpeed = 20 * delta;
-    currentRotation.y = THREE.MathUtils.lerp(
-      currentRotation.y,
-      targetRotationY,
-      rotationSpeed
-    );
-
-    // Convert back to Quaternion and set the rotation
-    const newQuaternion = new THREE.Quaternion().setFromEuler(currentRotation);
-    vehicle.current.setRotation(
-      {
-        x: newQuaternion.x,
-        y: newQuaternion.y,
-        z: newQuaternion.z,
-        w: newQuaternion.w,
-      },
-      true
-    );
-
-    // Apply the impulse
     vehicle.current.applyImpulse(
       vec3({ x: impulse.x, y: impulse.y, z: impulse.z }),
       true
     );
 
-    // Update camera (zoomed out)
     const cameraPosition = new THREE.Vector3(0, 8, 15)
-      .applyQuaternion(newQuaternion)
+      .applyQuaternion(threeQuaternion)
       .add(vehiclePosition);
     const cameraTarget = new THREE.Vector3().copy(vehiclePosition);
 
     camera.position.lerp(cameraPosition, 5 * delta);
     camera.lookAt(cameraTarget);
 
-    // Update score only when moving forward
     const velocity = vehicle.current.linvel();
     if (velocity.z < -0.1) {
       setScore((prevScore) => prevScore + delta);
     }
 
-    // Check for collision with ground
     if (vehiclePosition.y < -5) {
       onGameOver();
     }
@@ -141,19 +134,14 @@ export default function Vehicle({
       name="vehicle"
     >
       <group>
-        {/* Car body */}
         <mesh castShadow>
           <boxGeometry args={[2, 0.5, 3]} />
           <meshStandardMaterial color="#f6a1a1" />
         </mesh>
-
-        {/* Front wheel (centered) */}
         <mesh castShadow position={[0, -0.25, 1.2]}>
           <sphereGeometry args={[0.4, 16, 16]} />
           <meshStandardMaterial color="black" />
         </mesh>
-
-        {/* Back left wheel */}
         <mesh
           castShadow
           position={[-0.9, -0.25, -1.2]}
@@ -162,8 +150,6 @@ export default function Vehicle({
           <cylinderGeometry args={[0.4, 0.4, 0.4, 16]} />
           <meshStandardMaterial color="black" />
         </mesh>
-
-        {/* Back right wheel */}
         <mesh
           castShadow
           position={[0.9, -0.25, -1.2]}
